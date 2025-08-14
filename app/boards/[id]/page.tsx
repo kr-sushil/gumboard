@@ -702,7 +702,12 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   if (!board && boardId !== "all-notes" && boardId !== "archive") {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Board not found</div>
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-2">Board not found</h1>
+          <Button asChild>
+            <Link href="/">Go to Gumboard</Link>
+          </Button>
+        </div>
       </div>
     );
   }
@@ -910,13 +915,12 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                     key={note.id}
                     note={note}
                     currentUser={user as User}
-                    addingChecklistItem={addingChecklistItem}
                     onUpdate={handleUpdateNoteFromComponent}
                     onDelete={handleDeleteNote}
                     onArchive={boardId !== "archive" ? handleArchiveNote : undefined}
                     onUnarchive={boardId === "archive" ? handleUnarchiveNote : undefined}
                     showBoardName={boardId === "all-notes" || boardId === "archive"}
-                    className="note-background p-4"
+                    className="shadow-md shadow-black/10 p-4"
                     style={{
                       backgroundColor: resolvedTheme === "dark" ? "#18181B" : note.color,
                     }}
