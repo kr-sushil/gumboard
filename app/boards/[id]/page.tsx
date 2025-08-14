@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Plus, ChevronDown, Settings, Search } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { ChevronDown, Search, Copy, Trash2, Settings, X } from "lucide-react";
 import Link from "next/link";
 import { BetaBadge } from "@/components/ui/beta-badge";
 import { FullPageLoader } from "@/components/ui/loader";
@@ -62,8 +63,13 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const pendingDeleteTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [boardSettingsDialog, setBoardSettingsDialog] = useState(false);
   const [boardSettings, setBoardSettings] = useState({
+    name: "",
+    description: "",
+    isPublic: false,
     sendSlackUpdates: true,
   });
+  const [copiedPublicUrl, setCopiedPublicUrl] = useState(false);
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState(false);
   const boardRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -258,8 +264,10 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
       const search = searchTerm.toLowerCase();
       filteredNotes = filteredNotes.filter((note) => {
         const authorName = (note.user.name || note.user.email).toLowerCase();
-        const noteContent = note.content.toLowerCase();
-        return authorName.includes(search) || noteContent.includes(search);
+        // Search in checklist items content
+        const checklistContent =
+          note.checklistItems?.map((item) => item.content.toLowerCase()).join(" ") || "";
+        return authorName.includes(search) || checklistContent.includes(search);
       });
     }
 
@@ -394,6 +402,9 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
         const { board } = await boardResponse.json();
         setBoard(board);
         setBoardSettings({
+          name: board.name,
+          description: board.description || "",
+          isPublic: (board as { isPublic?: boolean })?.isPublic ?? false,
           sendSlackUpdates: (board as { sendSlackUpdates?: boolean })?.sendSlackUpdates ?? true,
         });
       }
@@ -450,7 +461,6 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            content: "",
             checklistItems: [],
             ...(isAllNotesView && { boardId: targetBoardId }),
           }),
@@ -618,7 +628,12 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     }
   };
 
-  const handleUpdateBoardSettings = async (settings: { sendSlackUpdates: boolean }) => {
+  const handleUpdateBoardSettings = async (settings: {
+    name?: string;
+    description?: string;
+    isPublic?: boolean;
+    sendSlackUpdates: boolean;
+  }) => {
     try {
       const response = await fetch(`/api/boards/${boardId}`, {
         method: "PUT",
@@ -629,12 +644,55 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
       if (response.ok) {
         const { board } = await response.json();
         setBoard(board);
-        setBoardSettings({ sendSlackUpdates: board.sendSlackUpdates });
+        setBoardSettings({
+          name: board.name,
+          description: board.description || "",
+          isPublic: (board as { isPublic?: boolean })?.isPublic ?? false,
+          sendSlackUpdates: (board as { sendSlackUpdates?: boolean })?.sendSlackUpdates ?? true,
+        });
         setBoardSettingsDialog(false);
       }
     } catch (error) {
       console.error("Error updating board settings:", error);
     }
+  };
+
+  const handleCopyPublicUrl = async () => {
+    const publicUrl = `${window.location.origin}/public/boards/${boardId}`;
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      setCopiedPublicUrl(true);
+      setTimeout(() => setCopiedPublicUrl(false), 2000);
+    } catch (error) {
+      console.error("Failed to copy URL:", error);
+    }
+  };
+
+  const handleDeleteBoard = async () => {
+    try {
+      const response = await fetch(`/api/boards/${boardId}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        router.push("/dashboard");
+      } else {
+        const errorData = await response.json();
+        setErrorDialog({
+          open: true,
+          title: "Failed to delete board",
+          description: errorData.error || "Failed to delete board",
+        });
+      }
+    } catch (error) {
+      console.error("Error deleting board:", error);
+      setErrorDialog({
+        open: true,
+        title: "Failed to delete board",
+        description: "Failed to delete board",
+      });
+    }
+    setDeleteConfirmDialog(false);
   };
 
   if (loading) {
@@ -650,23 +708,23 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   }
 
   return (
-    <div className="min-h-screen max-w-screen bg-background dark:bg-zinc-950">
-      <div className="bg-card dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-800 shadow-sm">
-        <div className="flex flex-wrap sm:flex-nowrap justify-between items-center h-auto sm:h-16 p-2 sm:p-0">
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:space-x-3 w-full sm:w-auto">
+    <div className="min-h-screen max-w-screen bg-zinc-100 dark:bg-zinc-800 bg-dots">
+      <div>
+        <div className="mx-2 flex flex-wrap sm:flex-nowrap justify-between items-center h-auto sm:h-16 p-2 sm:p-0">
+          <div className="bg-white dark:bg-zinc-900 shadow-sm border border-zinc-100 rounded-lg dark:border-zinc-800 mt-2 py-2 px-3 flex flex-wrap sm:flex-nowrap items-center sm:space-x-3 w-full sm:w-auto">
             {/* Company Name */}
-            <Link href="/dashboard" className="flex-shrink-0 pl-4 sm:pl-2 lg:pl-4">
-              <h1 className="text-2xl font-bold text-blue-600 dark:text-blue-400 flex items-center gap-2">
+            <Link href="/dashboard" className="flex-shrink-0 pl-1">
+              <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-3">
                 Gumboard
                 <BetaBadge />
               </h1>
             </Link>
-
+            <div className="h-6 w-px m-1.5 bg-zinc-100 dark:bg-zinc-700" />
             {/* Board Selector Dropdown */}
-            <div className="relative board-dropdown flex-1 sm:flex-none">
+            <div className="relative board-dropdown flex-1 mr-0 sm:flex-none">
               <Button
                 onClick={() => setShowBoardDropdown(!showBoardDropdown)}
-                className="flex items-center justify-between border border-gray-200 dark:border-zinc-800 space-x-2 text-foreground dark:text-zinc-100 hover:text-foreground dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-zinc-600 rounded-md px-3 py-2 cursor-pointer w-full sm:w-auto"
+                className={`flex items-center justify-between ${showBoardDropdown ? "bg-zinc-100 dark:bg-zinc-800" : "hover:bg-zinc-100 dark:hover:bg-zinc-800"} text-foreground dark:text-zinc-100 hover:text-foreground dark:hover:text-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600 dark:focus-visible:ring-sky-600 rounded-lg px-2 py-2 cursor-pointer w-full sm:w-auto`}
               >
                 <div>
                   <div className="text-sm font-semibold text-foreground dark:text-zinc-100">
@@ -678,93 +736,86 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                   </div>
                 </div>
                 <ChevronDown
-                  className={`w-4 h-4 text-muted-foreground dark:text-zinc-400 transition-transform ${
-                    showBoardDropdown ? "rotate-180" : ""
-                  }`}
+                  className={`w-4 h-4 text-muted-foreground dark:text-zinc-400 transition-transform }`}
                 />
               </Button>
 
               {showBoardDropdown && (
-                <div className="fixed sm:absolute left-0 mt-2 w-full sm:w-64 bg-white dark:bg-zinc-900 rounded-md shadow-lg border border-gray-200 dark:border-zinc-800 z-50 max-h-80 overflow-y-auto">
-                  <div className="py-1">
+                <div className="fixed sm:absolute left-0 mt-1 w-full sm:w-64 bg-white dark:bg-zinc-900 rounded-lg shadow-lg border border-zinc-100 dark:border-zinc-800 z-50 max-h-80 overflow-y-auto">
+                  <div className="p-2 flex flex-col gap-1">
+                    {/* Boards */}
+                    {allBoards.map((b) => (
+                      <Link
+                        key={b.id}
+                        href={`/boards/${b.id}`}
+                        className={`rounded-lg block font-medium px-3 py-1.5 text-sm hover:text-white hover:bg-sky-600 dark:hover:bg-sky-600  dark:hover:text-white ${
+                          b.id === boardId
+                            ? "bg-zinc-100 dark:bg-zinc-800 text-foreground dark:text-zinc-100 font-semibold"
+                            : "text-foreground dark:text-zinc-100"
+                        }`}
+                        onClick={() => setShowBoardDropdown(false)}
+                      >
+                        <div>{b.name}</div>
+                      </Link>
+                    ))}
+
+                    {allBoards.length > 0 && (
+                      <div className="border-t border-zinc-100 dark:border-zinc-800 my-1"></div>
+                    )}
+
                     {/* All Notes Option */}
                     <Link
                       href="/boards/all-notes"
-                      className={`block px-4 py-2 text-sm hover:bg-accent dark:hover:bg-zinc-800 ${
+                      className={`rounded-lg font-medium block px-3 py-1.5 text-sm hover:text-white hover:bg-sky-600 dark:hover:bg-sky-600 ${
                         boardId === "all-notes"
-                          ? "bg-blue-50 dark:bg-zinc-900/70 text-blue-700 dark:text-blue-300"
-                          : "text-foreground dark:text-zinc-100"
+                          ? "bg-zinc-100 dark:bg-zinc-800 dark:text-white font-semibold"
+                          : "text-foreground dark:text-white"
                       }`}
                       onClick={() => setShowBoardDropdown(false)}
                     >
-                      <div className="font-medium">All notes</div>
-                      <div className="text-xs text-muted-foreground dark:text-zinc-400 mt-1">
-                        Notes from all boards
-                      </div>
+                      <div>All notes</div>
                     </Link>
 
                     {/* Archive Option */}
                     <Link
                       href="/boards/archive"
-                      className={`block px-4 py-2 text-sm hover:bg-accent dark:hover:bg-zinc-800 ${
+                      className={`rounded-lg block font-medium px-3 py-1.5 text-sm hover:text-white hover:bg-sky-600 dark:hover:bg-sky-600 ${
                         boardId === "archive"
-                          ? "bg-blue-50 dark:bg-zinc-900/70 text-blue-700 dark:text-blue-300"
-                          : "text-foreground dark:text-zinc-100"
+                          ? "bg-zinc-100 dark:bg-zinc-800 dark:text-white font-semibold"
+                          : "text-foreground dark:text-white"
                       }`}
                       onClick={() => setShowBoardDropdown(false)}
                     >
-                      <div className="font-medium">Archive</div>
-                      <div className="text-xs text-muted-foreground dark:text-zinc-400 mt-1">
-                        Archived notes from all boards
-                      </div>
+                      <div>All archived</div>
                     </Link>
-
-                    {allBoards.length > 0 && (
-                      <div className="border-t border-gray-200 dark:border-zinc-800 my-1"></div>
-                    )}
-                    {allBoards.map((b) => (
-                      <Link
-                        key={b.id}
-                        href={`/boards/${b.id}`}
-                        className={`block px-4 py-2 text-sm hover:bg-accent dark:hover:bg-zinc-800 ${
-                          b.id === boardId
-                            ? "bg-blue-50 dark:bg-zinc-900/70 text-blue-700 dark:text-blue-300"
-                            : "text-foreground dark:text-zinc-100"
-                        }`}
-                        onClick={() => setShowBoardDropdown(false)}
-                      >
-                        <div className="font-medium">{b.name}</div>
-                        {b.description && (
-                          <div className="text-xs text-muted-foreground dark:text-zinc-400 mt-1">
-                            {b.description}
-                          </div>
-                        )}
-                      </Link>
-                    ))}
-                    {allBoards.length > 0 && (
-                      <div className="border-t border-gray-200 dark:border-zinc-800 my-1"></div>
-                    )}
+                    <div className="border-t border-zinc-100 dark:border-zinc-800 my-1"></div>
                     <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => {
                         setShowAddBoard(true);
                         setShowBoardDropdown(false);
                       }}
-                      className="flex items-center w-full px-4 py-2 text-sm text-foreground dark:text-zinc-100 hover:bg-accent dark:hover:bg-zinc-800"
+                      className="flex items-center w-full px-4 py-2"
                     >
-                      <Plus className="w-4 h-4 mr-2" />
                       <span className="font-medium">Create new board</span>
                     </Button>
                     {boardId !== "all-notes" && boardId !== "archive" && (
                       <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => {
                           setBoardSettings({
+                            name: board?.name || "",
+                            description: board?.description || "",
+                            isPublic: (board as { isPublic?: boolean })?.isPublic ?? false,
                             sendSlackUpdates:
                               (board as { sendSlackUpdates?: boolean })?.sendSlackUpdates ?? true,
                           });
                           setBoardSettingsDialog(true);
                           setShowBoardDropdown(false);
                         }}
-                        className="flex items-center w-full px-4 py-2 text-sm text-foreground dark:text-zinc-100 hover:bg-accent dark:hover:bg-zinc-800"
+                        className="flex items-center w-full px-4 py-2"
                       >
                         <Settings className="w-4 h-4 mr-2" />
                         <span className="font-medium">Board settings</span>
@@ -774,9 +825,10 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                 </div>
               )}
             </div>
+            <div className="h-6 w-px m-1.5 bg-zinc-100 dark:bg-zinc-700" />
 
             {/* Filter Popover */}
-            <div className="relative board-dropdown flex-1 sm:flex-none">
+            <div className="relative board-dropdown mr-0">
               <FilterPopover
                 startDate={dateRange.startDate}
                 endDate={dateRange.endDate}
@@ -791,13 +843,13 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                   setSelectedAuthor(authorId);
                   updateURL(undefined, undefined, authorId);
                 }}
-                className="min-w-fit"
+                className="w-fit"
               />
             </div>
           </div>
 
           {/* Right side - Search, Add Note and User dropdown */}
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+          <div className="bg-white dark:bg-zinc-900 shadow-sm border border-zinc-100 rounded-lg dark:border-zinc-800 mt-2 py-2 px-3 flex flex-wrap sm:flex-nowrap items-center sm:space-x-3 w-full sm:w-auto gap-2 md:gap-0">
             {/* Search Box */}
             <div className="relative flex-1 sm:flex-none min-w-[150px]">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -811,7 +863,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
                 }}
-                className="w-full sm:w-64 pl-10 pr-8 py-2 border border-gray-200 dark:border-zinc-800 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-zinc-600 focus:border-transparent text-sm bg-background dark:bg-zinc-900 text-foreground dark:text-zinc-100 placeholder:text-muted-foreground dark:placeholder:text-zinc-400"
+                className="w-full sm:w-64 pl-10 pr-8 py-2 border border-zinc-100 dark:border-zinc-800 rounded-md focus:outline-none focus:ring-2 focus:ring-sky-600 dark:focus:ring-sky-600 focus:border-transparent text-sm bg-background dark:bg-zinc-900 text-foreground dark:text-zinc-100 placeholder:text-muted-foreground dark:placeholder:text-zinc-400"
               />
               {searchTerm && (
                 <Button
@@ -822,7 +874,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                   }}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground dark:text-zinc-400 hover:text-foreground dark:hover:text-zinc-100 cursor-pointer"
                 >
-                  ×
+                  <X className="h-4 w-4" />
                 </Button>
               )}
             </div>
@@ -835,26 +887,19 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                   handleAddNote();
                 }
               }}
-              className="flex items-center justify-center w-10 h-10 sm:w-auto sm:h-auto sm:space-x-2 bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer font-medium"
+              className="flex items-center justify-center text-white w-fit h-10 sm:w-auto sm:h-auto sm:space-x-2 bg-sky-600 hover:bg-sky-500 transition-all duration-200 cursor-pointer font-medium"
             >
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Add Note</span>
+              <span>Add note</span>
             </Button>
 
             {/* User Dropdown */}
-            <div className="mr-3">
-              <ProfileDropdown user={user} />
-            </div>
+            <ProfileDropdown user={user} />
           </div>
         </div>
       </div>
 
       {/* Board Area */}
-      <div
-        ref={boardRef}
-        className="relative w-full bg-gray-50 dark:bg-zinc-950"
-        style={{ minHeight: "calc(100vh - 64px)" }}
-      >
+      <div ref={boardRef} className="relative w-full" style={{ minHeight: "calc(100vh - 64px)" }}>
         {/* Notes */}
         <div className="p-3 md:p-5">
           <div className={`flex gap-${columnDetails.gap}`}>
@@ -920,33 +965,6 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
               </Button>
             </div>
           )}
-
-        {notes.length === 0 && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 dark:text-gray-400">
-            <div className="text-xl mb-2">No notes yet</div>
-            <div className="text-sm mb-4">Click &ldquo;Add Note&rdquo; to get started</div>
-            <Button
-              onClick={() => {
-                if (boardId === "all-notes" && allBoards.length > 0) {
-                  handleAddNote(allBoards[0].id);
-                } else if (boardId === "archive") {
-                  setErrorDialog({
-                    open: true,
-                    title: "Cannot Add Note",
-                    description:
-                      "You cannot add notes directly to the archive. Notes are archived from other boards.",
-                  });
-                } else {
-                  handleAddNote();
-                }
-              }}
-              className="flex items-center space-x-2 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Your First Note</span>
-            </Button>
-          </div>
-        )}
       </div>
 
       {showAddBoard && (
@@ -1008,7 +1026,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                 </Button>
                 <Button
                   type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-500 dark:hover:bg-blue-600 dark:text-zinc-100"
+                  className="bg-blue-600 hover:bg-blue-700 text-zinc-100 dark:bg-blue-500 dark:hover:bg-blue-600 dark:text-zinc-100"
                 >
                   Create board
                 </Button>
@@ -1053,13 +1071,95 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          <div className="py-4">
+          <div className="py-4 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-foreground dark:text-zinc-200 mb-1">
+                Board name
+              </label>
+              <Input
+                type="text"
+                value={boardSettings.name}
+                onChange={(e) => setBoardSettings((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="Enter board name"
+                className="bg-white dark:bg-zinc-900 text-foreground dark:text-zinc-100 border border-gray-200 dark:border-zinc-700"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground dark:text-zinc-200 mb-1">
+                Description (optional)
+              </label>
+              <Input
+                type="text"
+                value={boardSettings.description}
+                onChange={(e) =>
+                  setBoardSettings((prev) => ({ ...prev, description: e.target.value }))
+                }
+                placeholder="Enter board description"
+                className="bg-white dark:bg-zinc-900 text-foreground dark:text-zinc-100 border border-gray-200 dark:border-zinc-700"
+              />
+            </div>
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="isPublic"
+                  checked={boardSettings.isPublic}
+                  onCheckedChange={(checked) =>
+                    setBoardSettings((prev) => ({ ...prev, isPublic: checked as boolean }))
+                  }
+                />
+                <label
+                  htmlFor="isPublic"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-foreground dark:text-zinc-100"
+                >
+                  Make board public
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground dark:text-zinc-400 mt-1 ml-6">
+                When enabled, anyone with the link can view this board
+              </p>
+
+              {boardSettings.isPublic && (
+                <div className="ml-6 p-3 bg-gray-50 dark:bg-zinc-800 rounded-md">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-foreground dark:text-zinc-100">
+                        Public link
+                      </p>
+                      <p className="text-xs text-muted-foreground dark:text-zinc-400 break-all">
+                        {typeof window !== "undefined"
+                          ? `${window.location.origin}/public/boards/${boardId}`
+                          : ""}
+                      </p>
+                    </div>
+                    <Button
+                      onClick={handleCopyPublicUrl}
+                      size="sm"
+                      variant="outline"
+                      className="ml-3 flex items-center space-x-1"
+                    >
+                      {copiedPublicUrl ? (
+                        <>
+                          <span className="text-xs">✓</span>
+                          <span className="text-xs">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span className="text-xs">Copy</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="sendSlackUpdates"
                 checked={boardSettings.sendSlackUpdates}
                 onCheckedChange={(checked) =>
-                  setBoardSettings({ sendSlackUpdates: checked as boolean })
+                  setBoardSettings((prev) => ({ ...prev, sendSlackUpdates: checked as boolean }))
                 }
               />
               <label
@@ -1074,10 +1174,46 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
             </p>
           </div>
 
+          <AlertDialogFooter className="flex justify-between">
+            <Button
+              onClick={() => setDeleteConfirmDialog(true)}
+              variant="destructive"
+              className="mr-auto"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete Board
+            </Button>
+            <div className="flex space-x-2">
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => handleUpdateBoardSettings(boardSettings)}>
+                Save settings
+              </AlertDialogAction>
+            </div>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmDialog} onOpenChange={setDeleteConfirmDialog}>
+        <AlertDialogContent className="bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground dark:text-zinc-100">
+              Delete Board
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground dark:text-zinc-400">
+              Are you sure you want to delete &quot;{board?.name}&quot;? This action cannot be
+              undone and will permanently delete all notes in this board.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleUpdateBoardSettings(boardSettings)}>
-              Save settings
+            <AlertDialogCancel className="bg-white dark:bg-zinc-900 text-foreground dark:text-zinc-100 border border-gray-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteBoard}
+              className="bg-red-600 hover:bg-red-700 text-white dark:bg-red-600 dark:hover:bg-red-700"
+            >
+              Delete Board
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
