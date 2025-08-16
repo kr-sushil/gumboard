@@ -28,6 +28,8 @@ import type { Note, Board, User } from "@/components/note";
 import { useTheme } from "next-themes";
 import { ProfileDropdown } from "@/components/profile-dropdown";
 import { toast } from "sonner";
+import { useUser } from "@/app/contexts/UserContext";
+import { getUniqueAuthors, filterAndSortNotes } from "@/lib/utils";
 
 export default function BoardPage({ params }: { params: Promise<{ id: string }> }) {
   const [board, setBoard] = useState<Board | null>(null);
@@ -35,8 +37,8 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const { resolvedTheme } = useTheme();
   const [screenWidth, setScreenWidth] = useState(0);
   const [allBoards, setAllBoards] = useState<Board[]>([]);
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [notesloading, setNotesLoading] = useState(true);
+  const { user, loading: userLoading } = useUser();
   // Inline editing state removed; handled within Note component
   const [showBoardDropdown, setShowBoardDropdown] = useState(false);
   const [showAddBoard, setShowAddBoard] = useState(false);
@@ -73,6 +75,12 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   const boardRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  useEffect(() => {
+    if (!userLoading && !user) {
+      router.push("/auth/signin");
+    }
+  }, [user, userLoading, router]);
 
   // Update URL with current filter state
   const updateURL = (
@@ -232,94 +240,6 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Get unique authors from notes
-  const getUniqueAuthors = (notes: Note[]) => {
-    const authorsMap = new Map<string, { id: string; name: string; email: string }>();
-
-    notes.forEach((note) => {
-      if (!authorsMap.has(note.user.id)) {
-        authorsMap.set(note.user.id, {
-          id: note.user.id,
-          name: note.user.name || note.user.email.split("@")[0],
-          email: note.user.email,
-        });
-      }
-    });
-
-    return Array.from(authorsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-  };
-
-  // Filter notes based on search term, date range, and author
-  const filterAndSortNotes = (
-    notes: Note[],
-    searchTerm: string,
-    dateRange: { startDate: Date | null; endDate: Date | null },
-    authorId: string | null,
-    currentUser: User | null
-  ): Note[] => {
-    let filteredNotes = notes;
-
-    // Filter by search term
-    if (searchTerm.trim()) {
-      const search = searchTerm.toLowerCase();
-      filteredNotes = filteredNotes.filter((note) => {
-        const authorName = (note.user.name || note.user.email).toLowerCase();
-        // Search in checklist items content
-        const checklistContent =
-          note.checklistItems?.map((item) => item.content.toLowerCase()).join(" ") || "";
-        return authorName.includes(search) || checklistContent.includes(search);
-      });
-    }
-
-    // Filter by author
-    if (authorId) {
-      filteredNotes = filteredNotes.filter((note) => note.user.id === authorId);
-    }
-
-    // Filter by date range
-    if (dateRange.startDate || dateRange.endDate) {
-      filteredNotes = filteredNotes.filter((note) => {
-        const noteDate = new Date(note.createdAt);
-        const startOfDay = (date: Date) =>
-          new Date(date.getFullYear(), date.getMonth(), date.getDate());
-        const endOfDay = (date: Date) =>
-          new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-
-        if (dateRange.startDate && dateRange.endDate) {
-          return (
-            noteDate >= startOfDay(dateRange.startDate) && noteDate <= endOfDay(dateRange.endDate)
-          );
-        } else if (dateRange.startDate) {
-          return noteDate >= startOfDay(dateRange.startDate);
-        } else if (dateRange.endDate) {
-          return noteDate <= endOfDay(dateRange.endDate);
-        }
-        return true;
-      });
-    }
-
-    // Sort notes with user priority (current user's notes first) and then by creation date (newest first)
-    filteredNotes.sort((a, b) => {
-      // First priority: logged-in user's notes come first
-      if (currentUser) {
-        const aIsCurrentUser = a.user.id === currentUser.id;
-        const bIsCurrentUser = b.user.id === currentUser.id;
-
-        if (aIsCurrentUser && !bIsCurrentUser) {
-          return -1; // a (current user's note) comes first
-        }
-        if (!aIsCurrentUser && bIsCurrentUser) {
-          return 1; // b (current user's note) comes first
-        }
-      }
-
-      // Third priority: newest first
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-
-    return filteredNotes;
-  };
-
   // Get unique authors for dropdown
   const uniqueAuthors = useMemo(() => getUniqueAuthors(notes), [notes]);
 
@@ -344,18 +264,6 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
 
   const fetchBoardData = async () => {
     try {
-      // Get user info first to check authentication
-      const userResponse = await fetch("/api/user");
-      if (userResponse.status === 401) {
-        router.push("/auth/signin");
-        return;
-      }
-
-      if (userResponse.ok) {
-        const userData = await userResponse.json();
-        setUser(userData);
-      }
-
       // Fetch all boards for the dropdown
       let allBoardsResponse: Response;
       let notesResponse: Response | undefined;
@@ -424,7 +332,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     } catch (error) {
       console.error("Error fetching board data:", error);
     } finally {
-      setLoading(false);
+      setNotesLoading(false);
     }
   };
 
@@ -695,7 +603,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     setDeleteConfirmDialog(false);
   };
 
-  if (loading) {
+  if (userLoading || notesloading) {
     return <FullPageLoader message="Loading board..." />;
   }
 
@@ -833,7 +741,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
             <div className="h-6 w-px m-1.5 bg-zinc-100 dark:bg-zinc-700" />
 
             {/* Filter Popover */}
-            <div className="relative board-dropdown mr-0">
+            <div className="relative board-dropdown mr-0" data-slot="filter-popover">
               <FilterPopover
                 startDate={dateRange.startDate}
                 endDate={dateRange.endDate}
@@ -905,7 +813,6 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
 
       {/* Board Area */}
       <div ref={boardRef} className="relative w-full" style={{ minHeight: "calc(100vh - 64px)" }}>
-        {/* Notes */}
         <div className="p-3 md:p-5">
           <div className={`flex gap-${columnDetails.gap}`}>
             {columnsData.map((column, index) => (
@@ -1024,7 +931,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                     setNewBoardName("");
                     setNewBoardDescription("");
                   }}
-                  className="bg-white dark:bg-zinc-900 text-foreground dark:text-zinc-100 border border-gray-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  className="bg-white dark:bg-zinc-900 text-foreground dark:text-zinc-100 border border-gray-300 dark:border-zinc-700 hover:bg-zinc-100 hover:text-foreground hover:border-gray-300 dark:hover:bg-zinc-800"
                 >
                   Cancel
                 </Button>
@@ -1065,7 +972,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
       </AlertDialog>
 
       <AlertDialog open={boardSettingsDialog} onOpenChange={setBoardSettingsDialog}>
-        <AlertDialogContent className="bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800">
+        <AlertDialogContent className="bg-white dark:bg-zinc-950 border border-gray-200 dark:border-zinc-800 p-4 lg:p-6">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-foreground dark:text-zinc-100">
               Board settings
@@ -1165,6 +1072,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                 onCheckedChange={(checked) =>
                   setBoardSettings((prev) => ({ ...prev, sendSlackUpdates: checked as boolean }))
                 }
+                className="border-slate-500 bg-white/50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-600 mt-1"
               />
               <label
                 htmlFor="sendSlackUpdates"
@@ -1178,18 +1086,23 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
             </p>
           </div>
 
-          <AlertDialogFooter className="flex justify-between">
+          <AlertDialogFooter className="flex !flex-row justify-between">
             <Button
               onClick={() => setDeleteConfirmDialog(true)}
               variant="destructive"
-              className="mr-auto"
+              className="mr-auto bg-red-600 hover:bg-red-700 text-white dark:bg-red-600 dark:hover:bg-red-700"
             >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete Board
+              <Trash2 className="w-4 h-4" />
+              Delete <span className="hidden lg:inline">Board</span>
             </Button>
-            <div className="flex space-x-2">
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={() => handleUpdateBoardSettings(boardSettings)}>
+            <div className="flex space-x-2 items-center">
+              <AlertDialogCancel className="border-gray-400 text-foreground dark:text-zinc-100 dark:border-zinc-700 hover:bg-zinc-100 hover:text-foreground hover:border-gray-200 dark:hover:bg-zinc-800">
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => handleUpdateBoardSettings(boardSettings)}
+                className="bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-500 dark:hover:bg-blue-600 dark:text-white"
+              >
                 Save settings
               </AlertDialogAction>
             </div>
