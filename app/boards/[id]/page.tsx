@@ -6,10 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { ChevronDown, Search, Copy, Trash2, Settings, X } from "lucide-react";
+import { ChevronDown, Search, Copy, Trash2, Settings, X, ChevronUp } from "lucide-react";
 import Link from "next/link";
 import { BetaBadge } from "@/components/ui/beta-badge";
-import { FullPageLoader } from "@/components/ui/loader";
 import { FilterPopover } from "@/components/ui/filter-popover";
 import { Note as NoteCard } from "@/components/note";
 
@@ -30,6 +29,7 @@ import { ProfileDropdown } from "@/components/profile-dropdown";
 import { toast } from "sonner";
 import { useUser } from "@/app/contexts/UserContext";
 import { getUniqueAuthors, filterAndSortNotes } from "@/lib/utils";
+import { BoardPageSkeleton } from "@/components/board-skeleton";
 
 export default function BoardPage({ params }: { params: Promise<{ id: string }> }) {
   const [board, setBoard] = useState<Board | null>(null);
@@ -343,7 +343,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     if (!currentNote) return;
 
     // OPTIMISTIC UPDATE: Update UI immediately
-    setNotes(notes.map((n) => (n.id === updatedNote.id ? updatedNote : n)));
+    setNotes((prev) => prev.map((n) => (n.id === updatedNote.id ? updatedNote : n)));
   };
 
   const handleAddNote = async (targetBoardId?: string) => {
@@ -377,7 +377,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
 
       if (response.ok) {
         const { note } = await response.json();
-        setNotes([...notes, note]);
+        setNotes((prev) => [...prev, note]);
         setAddingChecklistItem(note.id);
       }
     } catch (error) {
@@ -444,7 +444,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
 
       const targetBoardId = currentNote?.board?.id ?? currentNote.boardId;
 
-      setNotes(notes.filter((n) => n.id !== noteId));
+      setNotes((prev) => prev.filter((n) => n.id !== noteId));
 
       const response = await fetch(`/api/boards/${targetBoardId}/notes/${noteId}`, {
         method: "PUT",
@@ -454,7 +454,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
 
       if (!response.ok) {
         // Revert on error
-        setNotes([...notes, currentNote]);
+        setNotes((prev) => [...prev, currentNote]);
         setErrorDialog({
           open: true,
           title: "Archive Failed",
@@ -473,7 +473,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
       const targetBoardId = currentNote.board?.id ?? currentNote.boardId;
       if (!targetBoardId) return;
 
-      setNotes(notes.filter((n) => n.id !== noteId));
+      setNotes((prev) => prev.filter((n) => n.id !== noteId));
 
       const response = await fetch(`/api/boards/${targetBoardId}/notes/${noteId}`, {
         method: "PUT",
@@ -482,7 +482,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
       });
 
       if (!response.ok) {
-        setNotes([...notes, currentNote]);
+        setNotes((prev) => [...prev, currentNote]);
         setErrorDialog({
           open: true,
           title: "Unarchive Failed",
@@ -552,6 +552,9 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
       if (response.ok) {
         const { board } = await response.json();
         setBoard(board);
+
+        setAllBoards((prevBoards) => prevBoards.map((b) => (b.id === board.id ? board : b)));
+
         setBoardSettings({
           name: board.name,
           description: board.description || "",
@@ -604,7 +607,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   };
 
   if (userLoading || notesloading) {
-    return <FullPageLoader message="Loading board..." />;
+    return <BoardPageSkeleton />;
   }
 
   if (!board && boardId !== "all-notes" && boardId !== "archive") {
@@ -637,7 +640,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
             <div className="relative board-dropdown flex-1 mr-0 sm:flex-none">
               <Button
                 onClick={() => setShowBoardDropdown(!showBoardDropdown)}
-                className={`flex items-center justify-between ${showBoardDropdown ? "bg-zinc-100 dark:bg-zinc-800" : "hover:bg-zinc-100 dark:hover:bg-zinc-800"} text-foreground dark:text-zinc-100 hover:text-foreground dark:hover:text-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600 dark:focus-visible:ring-sky-600 rounded-lg px-2 py-2 cursor-pointer w-full sm:w-auto`}
+                className={`flex items-center justify-between text-zinc-100 hover:text-foreground dark:hover:text-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600 dark:focus-visible:ring-sky-600 rounded-lg px-2 py-2 cursor-pointer w-full sm:w-auto`}
               >
                 <div>
                   <div className="text-sm font-semibold text-foreground dark:text-zinc-100">
@@ -648,9 +651,15 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                         : board?.name}
                   </div>
                 </div>
-                <ChevronDown
-                  className={`w-4 h-4 text-muted-foreground dark:text-zinc-400 transition-transform }`}
-                />
+                {showBoardDropdown ? (
+                  <ChevronUp
+                    className={`w-4 h-4 text-muted-foreground dark:text-zinc-400 transition-transform`}
+                  />
+                ) : (
+                  <ChevronDown
+                    className={`w-4 h-4 text-muted-foreground dark:text-zinc-400 transition-transform`}
+                  />
+                )}
               </Button>
 
               {showBoardDropdown && (
@@ -713,27 +722,6 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                     >
                       <span className="font-medium">Create new board</span>
                     </Button>
-                    {boardId !== "all-notes" && boardId !== "archive" && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setBoardSettings({
-                            name: board?.name || "",
-                            description: board?.description || "",
-                            isPublic: (board as { isPublic?: boolean })?.isPublic ?? false,
-                            sendSlackUpdates:
-                              (board as { sendSlackUpdates?: boolean })?.sendSlackUpdates ?? true,
-                          });
-                          setBoardSettingsDialog(true);
-                          setShowBoardDropdown(false);
-                        }}
-                        className="flex items-center w-full px-4 py-2"
-                      >
-                        <Settings className="w-4 h-4 mr-2" />
-                        <span className="font-medium">Board settings</span>
-                      </Button>
-                    )}
                   </div>
                 </div>
               )}
@@ -741,7 +729,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
             <div className="h-6 w-px m-1.5 bg-zinc-100 dark:bg-zinc-700" />
 
             {/* Filter Popover */}
-            <div className="relative board-dropdown mr-0" data-slot="filter-popover">
+            <div className="relative board-dropdown mr-1" data-slot="filter-popover">
               <FilterPopover
                 startDate={dateRange.startDate}
                 endDate={dateRange.endDate}
@@ -756,9 +744,30 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                   setSelectedAuthor(authorId);
                   updateURL(undefined, undefined, authorId);
                 }}
-                className="w-fit"
+                className="w-fit size-9"
               />
             </div>
+            {boardId !== "all-notes" && boardId !== "archive" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setBoardSettings({
+                    name: board?.name || "",
+                    description: board?.description || "",
+                    isPublic: (board as { isPublic?: boolean })?.isPublic ?? false,
+                    sendSlackUpdates:
+                      (board as { sendSlackUpdates?: boolean })?.sendSlackUpdates ?? true,
+                  });
+                  setBoardSettingsDialog(true);
+                }}
+                aria-label="Board settings"
+                title="Board settings"
+                className="flex items-center size-9"
+              >
+                <Settings className="size-4" />
+              </Button>
+            )}
           </div>
 
           {/* Right side - Search, Add Note and User dropdown */}
@@ -800,6 +809,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
                   handleAddNote();
                 }
               }}
+              disabled={boardId === "archive"}
               className="flex items-center justify-center text-white w-fit h-10 sm:w-auto sm:h-auto sm:space-x-2 bg-sky-600 hover:bg-sky-500 transition-all duration-200 cursor-pointer font-medium"
             >
               <span>Add note</span>
