@@ -28,15 +28,16 @@ import { useTheme } from "next-themes";
 import { ProfileDropdown } from "@/components/profile-dropdown";
 import { toast } from "sonner";
 import { useUser } from "@/app/contexts/UserContext";
-import { getUniqueAuthors, filterAndSortNotes } from "@/lib/utils";
+import { getUniqueAuthors, filterAndSortNotes, getBoardColumns } from "@/lib/utils";
 import { BoardPageSkeleton } from "@/components/board-skeleton";
+import { useBoardColumnMeta } from "@/lib/hooks";
 
 export default function BoardPage({ params }: { params: Promise<{ id: string }> }) {
   const [board, setBoard] = useState<Board | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const { resolvedTheme } = useTheme();
-  const [screenWidth, setScreenWidth] = useState(0);
   const [allBoards, setAllBoards] = useState<Board[]>([]);
+  const columnMeta = useBoardColumnMeta();
   const [notesloading, setNotesLoading] = useState(true);
   const { user, loading: userLoading } = useUser();
   // Inline editing state removed; handled within Note component
@@ -146,30 +147,6 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     setSelectedAuthor(urlAuthor);
   };
 
-  const columnDetails = useMemo(() => {
-    if (screenWidth < 576) return { count: 1, gap: 0 };
-    if (screenWidth < 768) return { count: 2, gap: 2 };
-    if (screenWidth < 992) return { count: 2, gap: 6 };
-    if (screenWidth < 1200) return { count: 3, gap: 2 };
-    return { count: Math.ceil(screenWidth / 430), gap: 4 };
-  }, [screenWidth]);
-
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-    const handleResize = () => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => {
-        setScreenWidth(window.innerWidth);
-      }, 50);
-    };
-    setScreenWidth(window.innerWidth);
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      clearTimeout(timeoutId);
-    };
-  }, []);
-
   useEffect(() => {
     const initializeParams = async () => {
       const resolvedParams = await params;
@@ -250,17 +227,8 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   );
 
   const columnsData = useMemo(() => {
-    let columns: Note[][] = [];
-    if (filteredNotes.length > 0) {
-      const columnCount = columnDetails.count;
-      columns = Array.from({ length: columnCount }, () => []);
-      filteredNotes.forEach((note, index) => {
-        const columnIndex = index % columnCount;
-        columns[columnIndex].push(note);
-      });
-    }
-    return columns;
-  }, [columnDetails, filteredNotes]);
+    return getBoardColumns(columnMeta.count, filteredNotes);
+  }, [columnMeta, filteredNotes]);
 
   const fetchBoardData = async () => {
     try {
@@ -860,7 +828,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
       {/* Board Area */}
       <div ref={boardRef} className="relative w-full" style={{ minHeight: "calc(100vh - 64px)" }}>
         <div className="p-3 md:p-5">
-          <div className={`flex gap-${columnDetails.gap}`}>
+          <div className={`flex gap-${columnMeta.gap}`}>
             {columnsData.map((column, index) => (
               <div key={index} className="flex-1 flex flex-col gap-4">
                 {column.map((note) => (
