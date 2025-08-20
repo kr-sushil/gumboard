@@ -179,7 +179,7 @@ export default function PublicBoardPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      <div ref={boardRef} className="relative w-full" style={{ minHeight: "calc(100vh - 64px)" }}>
+      <div ref={boardRef} className="w-full">
         <div className="p-3 md:p-5">
           <div className={`flex gap-${columnMeta.gap}`}>
             {columnsData.map((column, index) => (
