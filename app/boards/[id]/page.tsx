@@ -838,31 +838,32 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
       </div>
 
       {/* Board Area */}
-      <div ref={boardRef} className="w-full" style={{ minHeight: "calc(100vh - 64px)" }}>
-        <div className="p-3 md:p-5">
-          <div className={`flex gap-${columnMeta.gap}`}>
-            {columnsData.map((column, index) => (
-              <div key={index} className="flex-1 flex flex-col gap-4">
-                {column.map((note) => (
-                  <NoteCard
-                    key={note.id}
-                    note={note}
-                    currentUser={user as User}
-                    onUpdate={handleUpdateNoteFromComponent}
-                    onDelete={handleDeleteNote}
-                    onArchive={boardId !== "archive" ? handleArchiveNote : undefined}
-                    onUnarchive={boardId === "archive" ? handleUnarchiveNote : undefined}
-                    onCopy={handleCopyNote}
-                    showBoardName={boardId === "all-notes" || boardId === "archive"}
-                    className="shadow-md shadow-black/10 p-4"
-                    style={{
-                      backgroundColor: resolvedTheme === "dark" ? "#18181B" : note.color,
-                    }}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
+      <div
+        ref={boardRef}
+        className="relative w-full min-h-[calc(100vh-236px)] sm:min-h-[calc(100vh-64px)] p-3 md:p-5"
+      >
+        <div className={`flex gap-${columnMeta.gap}`}>
+          {columnsData.map((column, index) => (
+            <div key={index} className="flex-1 flex flex-col gap-4">
+              {column.map((note) => (
+                <NoteCard
+                  key={note.id}
+                  note={note}
+                  currentUser={user as User}
+                  onUpdate={handleUpdateNoteFromComponent}
+                  onDelete={handleDeleteNote}
+                  onArchive={boardId !== "archive" ? handleArchiveNote : undefined}
+                  onUnarchive={boardId === "archive" ? handleUnarchiveNote : undefined}
+                  onCopy={handleCopyNote}
+                  showBoardName={boardId === "all-notes" || boardId === "archive"}
+                  className="shadow-md shadow-black/10 p-4"
+                  style={{
+                    backgroundColor: resolvedTheme === "dark" ? "#18181B" : note.color,
+                  }}
+                />
+              ))}
+            </div>
+          ))}
         </div>
 
         {/* Empty State */}

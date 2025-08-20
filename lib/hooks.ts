@@ -7,7 +7,6 @@ export function useBoardColumnMeta() {
     let timeoutId: NodeJS.Timeout;
     const handleResize = () => {
       if (typeof window !== "undefined") {
-        console.log("handleResize");
         clearTimeout(timeoutId);
         timeoutId = setTimeout(() => {
           setScreenWidth(window.innerWidth);

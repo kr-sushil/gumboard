@@ -179,22 +179,20 @@ export default function PublicBoardPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      <div ref={boardRef} className="w-full">
-        <div className="p-3 md:p-5">
-          <div className={`flex gap-${columnMeta.gap}`}>
-            {columnsData.map((column, index) => (
-              <div key={index} className="flex-1 flex flex-col gap-4">
-                {column.map((note) => (
-                  <NoteCard
-                    key={note.id}
-                    note={note as Note}
-                    readonly={true}
-                    className="shadow-md shadow-black/10 p-4"
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
+      <div ref={boardRef} className="relative min-h-[calc(100vh-65px)] p-3 md:p-5 w-full">
+        <div className={`flex gap-${columnMeta.gap}`}>
+          {columnsData.map((column, index) => (
+            <div key={index} className="flex-1 flex flex-col gap-4">
+              {column.map((note) => (
+                <NoteCard
+                  key={note.id}
+                  note={note as Note}
+                  readonly={true}
+                  className="shadow-md shadow-black/10 p-4"
+                />
+              ))}
+            </div>
+          ))}
         </div>
 
         {filteredNotes.length === 0 && (
